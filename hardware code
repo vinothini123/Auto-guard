@@ -1,0 +1,77 @@
+#include <SoftwareSerial.h>
+
+// GSM (SIM800L)
+SoftwareSerial gsm(7, 8); // RX, TX
+
+// GPS (Neo-6M)
+SoftwareSerial gps(9, 10); // RX, TX
+
+int vibrationPin = 2;
+int threshold = 1; // HIGH means vibration detected
+
+String latitude = "";
+String longitude = "";
+
+void setup() {
+  Serial.begin(9600);
+  gsm.begin(9600);
+  gps.begin(9600);
+
+  pinMode(vibrationPin, INPUT);
+
+  Serial.println("Auto Guard System Started...");
+}
+
+void loop() {
+
+  // Read vibration sensor
+  int vibration = digitalRead(vibrationPin);
+
+  // Read GPS data
+  while (gps.available()) {
+    char c = gps.read();
+    Serial.write(c);
+
+    // Simple parsing (basic)
+    if (c == '$') {
+      String data = gps.readStringUntil('\n');
+
+      if (data.startsWith("GPGGA")) {
+        int firstComma = data.indexOf(',');
+        int secondComma = data.indexOf(',', firstComma + 1);
+        int thirdComma = data.indexOf(',', secondComma + 1);
+        int fourthComma = data.indexOf(',', thirdComma + 1);
+
+        latitude = data.substring(secondComma + 1, thirdComma);
+        longitude = data.substring(fourthComma + 1, data.indexOf(',', fourthComma + 1));
+      }
+    }
+  }
+
+  // If accident detected
+  if (vibration == threshold) {
+    Serial.println("Accident Detected!");
+
+    sendSMS();
+    delay(10000); // avoid repeated SMS
+  }
+}
+
+// Function to send SMS
+void sendSMS() {
+  gsm.println("AT+CMGF=1"); // Text mode
+  delay(1000);
+
+  gsm.println("AT+CMGS=\"+91XXXXXXXXXX\""); // Replace with your number
+  delay(1000);
+
+  gsm.print("Accident Detected!\n");
+  gsm.print("Location:\n");
+  gsm.print("Lat: " + latitude + "\n");
+  gsm.print("Lng: " + longitude + "\n");
+
+  gsm.write(26); // CTRL+Z to send SMS
+  delay(5000);
+
+  Serial.println("SMS Sent");
+}
